@@ -22,7 +22,7 @@ public class Main {
 
             clientSocket = connect(serverSocket);
 
-            final String httpMessage = "HTTP/1.1 200 OK\\r\\n\\r\\n\n";
+            final String httpMessage = "HTTP/1.1 200 OK\r\n\r\n";
             final PrintStream output = new PrintStream(clientSocket.getOutputStream());
             output.println(httpMessage);
 
