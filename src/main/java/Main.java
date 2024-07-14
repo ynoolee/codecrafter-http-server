@@ -15,16 +15,7 @@ public class Main {
 
             final String httpMessage = "HTTP/1.1 200 OK\r\n\r\n";
 
-
-            // my version 1 : using PrintStream
-//            final PrintStream output = new PrintStream(clientSocket.getOutputStream());
-//            output.println(httpMessage);
-//            output.flush();
-
-            // my version 2 : using BufferedOutputStream
-            final BufferedOutputStream bufferedOut = new BufferedOutputStream(clientSocket.getOutputStream());
-            bufferedOut.write(httpMessage.getBytes());
-            bufferedOut.flush();
+            sendMessage(clientSocket, httpMessage);
 
             clientSocket.close();
         } catch (IOException e) {
@@ -37,5 +28,16 @@ public class Main {
         clientSocket = serverSocket.accept(); // Wait for connection from client.
         System.out.println("accepted new connection");
         return clientSocket;
+    }
+
+    private static void sendMessage(final Socket clientSocket, final String httpMessage) throws IOException {
+        // my version 1 : using PrintStream
+//            final PrintStream output = new PrintStream(clientSocket.getOutputStream());
+//            output.println(httpMessage);
+//            output.flush();
+        // my version 2 : using BufferedOutputStream
+        final BufferedOutputStream bufferedOut = new BufferedOutputStream(clientSocket.getOutputStream());
+        bufferedOut.write(httpMessage.getBytes());
+        bufferedOut.flush();
     }
 }
