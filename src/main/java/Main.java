@@ -1,7 +1,11 @@
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.LineNumberReader;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
@@ -13,15 +17,38 @@ public class Main {
 
             Socket clientSocket = connectToServerSocket(serverSocket);
 
-            final String httpMessage = "HTTP/1.1 200 OK\r\n\r\n";
+            // receive message
+            final LineNumberReader reader = new LineNumberReader(new InputStreamReader(clientSocket.getInputStream()));
+            final String requestLine = reader.readLine();
 
-            sendMessage(clientSocket, httpMessage);
+            // parse and branch
+            final String path = extractPath(requestLine);
+
+            final String okResponse = "HTTP/1.1 200 OK\r\n\r\n";
+            final String notFoundResourceResponse = "HTTP/1.1 404 Not Found\r\n\r\n";
+
+
+            if("/".equals(path)) {
+                sendResponse(clientSocket, okResponse);
+            } else {
+                sendResponse(clientSocket, notFoundResourceResponse);
+            }
 
             clientSocket.close();
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
     }
+    private static String extractPath(String requestLine) {
+        final List<String> parts = parse(requestLine, " ");
+
+        return parts.get(1);
+    }
+
+    private static List<String> parse(String request, String delimiter) {
+        return Arrays.stream(request.split(delimiter)).toList();
+    }
+
 
     private static Socket connectToServerSocket(final ServerSocket serverSocket) throws IOException {
         Socket clientSocket;
@@ -30,7 +57,7 @@ public class Main {
         return clientSocket;
     }
 
-    private static void sendMessage(final Socket clientSocket, final String httpMessage) throws IOException {
+    private static void sendResponse(final Socket clientSocket, final String httpMessage) throws IOException {
         // my version 1 : using PrintStream
 //            final PrintStream output = new PrintStream(clientSocket.getOutputStream());
 //            output.println(httpMessage);
