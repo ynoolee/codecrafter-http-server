@@ -68,7 +68,7 @@ public class BufferedReaderTest {
     public void test3() {
         char cr = '\r';
         char lf = '\n';
-        Assertions.assertThat(cr).isEqualTo(lf);
+        Assertions.assertThat(cr).isNotEqualTo(lf);
     }
 
     @Test
