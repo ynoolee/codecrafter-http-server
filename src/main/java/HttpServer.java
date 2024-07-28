@@ -2,7 +2,9 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HttpServer {
 
@@ -24,9 +26,11 @@ public class HttpServer {
                 final String message = readHttpMessageNotContainingBody(inputStream);
 
                 List<String> parts = parse(message, "\r\n");
-                final StartLine startLine = createStartLine(parts);
 
-                sendResponse(startLine, bufferedStream);
+                final StartLine startLine = createStartLine(parts);
+                final Headers headers = createHeaders(parts.subList(1, parts.size()));
+
+                sendResponse(startLine, headers, bufferedStream);
 
                 bufferedStream.flush();
             }
@@ -36,11 +40,28 @@ public class HttpServer {
         }
     }
 
-    private static void sendResponse(final StartLine startLine, final BufferedOutputStream bufferedStream) throws IOException {
+    private Headers createHeaders(final List<String> headers) {
+        Map<String, String> map = new HashMap<>();
+
+        for (String header : headers) {
+            String[] part = Arrays.stream(header.split(":")).map(String::trim).toArray(String[]::new);
+            map.put(part[0], part[1]);
+        }
+        return new Headers(map);
+    }
+
+    private static void sendResponse(
+            final StartLine startLine
+            , final Headers headers
+            , final BufferedOutputStream bufferedStream
+    ) throws IOException {
         if ("/".equals(startLine.extractPath())) {
             bufferedStream.write(OK_RESPONSE.getBytes());
         } else if (startLine.extractPath().contains("/echo/")) {
             final HttpResponse response = HttpResponse.of(startLine.extractResourceId());
+            bufferedStream.write(response.toString().getBytes());
+        } else if (startLine.extractPath().contains("/user-agent")) {
+            final HttpResponse response = HttpResponse.of(headers.headerValue("User-Agent").orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
             bufferedStream.write(response.toString().getBytes());
         } else {
             bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
@@ -75,11 +96,10 @@ public class HttpServer {
             }
         }
 
-        char[] finalMessage = truncateAndCreateArray(tempMessageContainer, curIdx - 1);
+        char[] finalMessage = truncateAndCreateArray(tempMessageContainer, curIdx - 4);
 
         return new String(finalMessage);
     }
-
 
     private static char[] truncateAndCreateArray(char[] array, int length) {
         final char[] result = new char[length];
