@@ -1,10 +1,9 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class HttpServer {
 
@@ -16,28 +15,51 @@ public class HttpServer {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("HTTP server started on port " + port);
 
+            final int threadCount = 10;
 
-            try (final Socket clientSocket = serverSocket.accept();
-                 final InputStream inputStream = clientSocket.getInputStream();
-                 final OutputStream outputStream = clientSocket.getOutputStream();
-            ) {
-                final BufferedOutputStream bufferedStream = new BufferedOutputStream(outputStream);
-
-                final String message = readHttpMessageNotContainingBody(inputStream);
-
-                List<String> parts = parse(message, "\r\n");
-
-                final StartLine startLine = createStartLine(parts);
-                final Headers headers = createHeaders(parts.subList(1, parts.size()));
-
-                sendResponse(startLine, headers, bufferedStream);
-
-                bufferedStream.flush();
+            List<CompletableFuture<Void>> results = new ArrayList<>(threadCount);
+            for (int i = 0; i < threadCount; i++) {
+                results.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        acceptAndRespond(serverSocket);
+                    } catch (IOException e) {
+                        System.out.println("Error");
+                    }
+                }));
             }
-            System.out.println("Turn off HTTP Server");
+
+            // todo : Have to search another way for main thread to wait all jobs are completed
+            for (CompletableFuture<Void> result : results) {
+                result.get();
+            }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
+    }
+
+    private void acceptAndRespond(final ServerSocket serverSocket) throws IOException {
+        try (final Socket clientSocket = serverSocket.accept();
+             final InputStream inputStream = clientSocket.getInputStream();
+             final OutputStream outputStream = clientSocket.getOutputStream();
+        ) {
+            final BufferedOutputStream bufferedStream = new BufferedOutputStream(outputStream);
+
+            final String message = readHttpMessageNotContainingBody(inputStream);
+
+            List<String> parts = parse(message, "\r\n");
+
+            final StartLine startLine = createStartLine(parts);
+            final Headers headers = createHeaders(parts.subList(1, parts.size()));
+
+            sendResponse(startLine, headers, bufferedStream);
+
+            bufferedStream.flush();
+        }
+        System.out.println("Turn off HTTP Server");
     }
 
     private Headers createHeaders(final List<String> headers) {
