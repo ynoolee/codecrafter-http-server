@@ -17,15 +17,28 @@ public class HttpServer {
                  final InputStream inputStream = clientSocket.getInputStream()
             ) {
                 final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                final char[] tempMessageContainer = new char[4096];
+                final char[] finalMessage;
+                int curIdx = 0;
 
                 while (true) {
-                    String readLine = reader.readLine();
+                    char readChar = (char) reader.read();
 
-                    if (readLine == null) {
-                        break;
+                    tempMessageContainer[curIdx++] = readChar;
+
+                    if (readChar == '\n') {
+                        if (curIdx >= 4
+                                && tempMessageContainer[curIdx - 2] == '\r'
+                                && tempMessageContainer[curIdx - 3] == '\n'
+                                && tempMessageContainer[curIdx - 4] == '\r') {
+                            break;
+                        }
                     }
-                    System.out.println(readLine);
                 }
+                finalMessage = new char[curIdx - 1];
+
+                System.arraycopy(tempMessageContainer, 0, finalMessage, 0, finalMessage.length);
+                System.out.println(finalMessage);
             }
             System.out.println("Turn off HTTP Server");
         } catch (IOException e) {
