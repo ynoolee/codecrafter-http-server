@@ -83,8 +83,7 @@ public class HttpServer {
 //            try (final FileWriter fileWriter = new FileWriter(absoluteFilePath);) {
 //                fileWriter.write("HEllo world!");
 //            }
-
-            System.out.println("enter files processing block");
+            System.out.println("absolutepath " + absoluteFilePath);
             try (
                     var file = new FileInputStream(absoluteFilePath);
             ) {
