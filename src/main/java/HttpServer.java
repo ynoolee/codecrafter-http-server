@@ -1,9 +1,13 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class HttpServer {
 
@@ -16,28 +20,27 @@ public class HttpServer {
             System.out.println("HTTP server started on port " + port);
 
             final int threadCount = 10;
+            final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
 
-            List<CompletableFuture<Void>> results = new ArrayList<>(threadCount);
             for (int i = 0; i < threadCount; i++) {
-                results.add(CompletableFuture.runAsync(() -> {
+
+                CompletableFuture.runAsync(() -> {
                     try {
                         acceptAndRespond(serverSocket);
                     } catch (IOException e) {
                         System.out.println("Error");
                     }
-                }));
-            }
-
-            // todo : Have to search another way for main thread to wait all jobs are completed
-            for (CompletableFuture<Void> result : results) {
-                result.get();
+                }, threadPool).whenComplete((a, b) -> {
+                    System.out.printf("%s thread response complete%n", Thread.currentThread().getName());
+                }).exceptionally((ex) -> {
+                    System.out.println(Arrays.toString(ex.getStackTrace()));
+                    System.out.printf("%s thread exception :%s - %s%n"
+                            , Thread.currentThread().getName(), ex.getClass().getName(), ex.getMessage());
+                    return null;
+                });
             }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -59,7 +62,7 @@ public class HttpServer {
 
             bufferedStream.flush();
         }
-        System.out.println("Turn off HTTP Server");
+        System.out.println("Close HTTP connection");
     }
 
     private Headers createHeaders(final List<String> headers) {
