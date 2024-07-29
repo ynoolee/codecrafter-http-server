@@ -13,7 +13,7 @@ public class HttpServer {
     private static final String OK_RESPONSE = "HTTP/1.1 200 OK\r\n\r\n";
     private static final String NOT_FOUND_RESOURCE_RESPONSE = "HTTP/1.1 404 Not Found\r\n\r\n";
 
-    public void run(int port) {
+    public void run(int port, String absoluteParentPath) {
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("HTTP server started on port " + port);
@@ -22,7 +22,7 @@ public class HttpServer {
             final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
 
             try {
-                acceptAndRespond(serverSocket);
+                acceptAndRespond(serverSocket, absoluteParentPath);
             } catch (IOException e) {
                 System.out.println("Error");
             }
@@ -31,7 +31,7 @@ public class HttpServer {
         }
     }
 
-    private void acceptAndRespond(final ServerSocket serverSocket) throws IOException {
+    private void acceptAndRespond(final ServerSocket serverSocket, final String absoluteParentPath) throws IOException {
         try (final Socket clientSocket = serverSocket.accept();
              final InputStream inputStream = clientSocket.getInputStream();
              final OutputStream outputStream = clientSocket.getOutputStream();
@@ -45,7 +45,7 @@ public class HttpServer {
             final StartLine startLine = createStartLine(parts);
             final Headers headers = createHeaders(parts.subList(1, parts.size()));
 
-            sendResponse(startLine, headers, bufferedStream);
+            sendResponse(startLine, headers, bufferedStream, absoluteParentPath);
 
             bufferedStream.flush();
         }
@@ -66,6 +66,7 @@ public class HttpServer {
             final StartLine startLine
             , final Headers headers
             , final BufferedOutputStream bufferedStream
+            , final String absoluteParentPath
     ) throws IOException {
         final String path = startLine.extractPath();
         if ("/".equals(path)) {
@@ -78,7 +79,7 @@ public class HttpServer {
             bufferedStream.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
             // read file
-            final var absoluteFilePath = "/tmp/" + startLine.extractResourceId();
+            final var absoluteFilePath = absoluteParentPath + startLine.extractResourceId();
 
             System.out.println("absolutepath " + absoluteFilePath);
             try (

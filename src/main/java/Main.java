@@ -7,12 +7,8 @@ public class Main {
         for (String arg : args) {
             System.out.printf("%dth arg : %s\n", count++, arg);
         }
-        try (final FileWriter fileWriter = new FileWriter(args[1]);) {
-            fileWriter.write("HEllo world!");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+
         final HttpServer httpServer = new HttpServer();
-        httpServer.run(4221);
+        httpServer.run(4221, args[1]);
     }
 }
