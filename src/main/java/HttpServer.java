@@ -79,10 +79,7 @@ public class HttpServer {
         } else if (path.contains("/files/")) {
             // read file
             final var absoluteFilePath = "/tmp/" + startLine.extractResourceId();
-            // todo : file write 도 해야함 -- jar 파일 실행 때 인자로 받아온 파일네임으로 생성해야함
-//            try (final FileWriter fileWriter = new FileWriter(absoluteFilePath);) {
-//                fileWriter.write("HEllo world!");
-//            }
+
             System.out.println("absolutepath " + absoluteFilePath);
             try (
                     var file = new FileInputStream(absoluteFilePath);
