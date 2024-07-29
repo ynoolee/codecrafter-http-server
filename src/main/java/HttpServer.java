@@ -22,22 +22,10 @@ public class HttpServer {
             final int threadCount = 10;
             final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
 
-            for (int i = 0; i < threadCount; i++) {
-
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        acceptAndRespond(serverSocket);
-                    } catch (IOException e) {
-                        System.out.println("Error");
-                    }
-                }, threadPool).whenComplete((a, b) -> {
-                    System.out.printf("%s thread response complete%n", Thread.currentThread().getName());
-                }).exceptionally((ex) -> {
-                    System.out.println(Arrays.toString(ex.getStackTrace()));
-                    System.out.printf("%s thread exception :%s - %s%n"
-                            , Thread.currentThread().getName(), ex.getClass().getName(), ex.getMessage());
-                    return null;
-                });
+            try {
+                acceptAndRespond(serverSocket);
+            } catch (IOException e) {
+                System.out.println("Error");
             }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
@@ -80,14 +68,27 @@ public class HttpServer {
             , final Headers headers
             , final BufferedOutputStream bufferedStream
     ) throws IOException {
-        if ("/".equals(startLine.extractPath())) {
+        final String path = startLine.extractPath();
+        if ("/".equals(path)) {
             bufferedStream.write(OK_RESPONSE.getBytes());
-        } else if (startLine.extractPath().contains("/echo/")) {
-            final HttpResponse response = HttpResponse.of(startLine.extractResourceId());
+        } else if (path.contains("/echo/")) {
+            final HttpResponse response = HttpResponse.ofPlainText(startLine.extractResourceId());
             bufferedStream.write(response.toString().getBytes());
-        } else if (startLine.extractPath().contains("/user-agent")) {
-            final HttpResponse response = HttpResponse.of(headers.headerValue("User-Agent").orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
+        } else if (path.contains("/user-agent")) {
+            final HttpResponse response = HttpResponse.ofPlainText(headers.headerValue("User-Agent").orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
             bufferedStream.write(response.toString().getBytes());
+        } else if (path.contains("/files/")) {
+            // read file
+            final var absoluteFilePath = "/tmp/" + startLine.extractResourceId();
+            try (
+                    var file = new FileInputStream(absoluteFilePath);
+            ) {
+                final byte[] contents = file.readAllBytes();
+                final var response = HttpResponse.ofBinary(contents);
+                bufferedStream.write(response.toString().getBytes());
+            } catch (FileNotFoundException ex) {
+                bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+            }
         } else {
             bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
