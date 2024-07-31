@@ -1,4 +1,3 @@
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -29,16 +28,12 @@ public record HttpResponse<T>(
         return new HttpResponse<String>(OK, map, body);
     }
 
-    public static HttpResponse<Byte[]> ofBinary(byte[] body) {
+    public static HttpResponse<String> ofFile(String body) {
         final Map<String, String> map = new HashMap<>();
         map.put(CONTENT_TYPE_HEADER, CONTENT_TYPE.BINARY_DATE.value + CRLF);
-        map.put(CONTENT_LENGTH_HEADER, body.length + CRLF);
+        map.put(CONTENT_LENGTH_HEADER, body.getBytes().length + CRLF);
 
-        // convert byte[] -> Byte[]
-        final Byte[] bytes = new Byte[body.length];
-        Arrays.setAll(bytes, e -> body[e]);
-
-        return new HttpResponse<>(OK, map, bytes);
+        return new HttpResponse<>(OK, map, body);
     }
 
     private enum CONTENT_TYPE {
