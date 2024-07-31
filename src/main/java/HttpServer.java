@@ -6,7 +6,6 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 
 public class HttpServer {
 
@@ -40,7 +39,7 @@ public class HttpServer {
                 }));
             }
 
-            // todo : Have to search another way for main thread to wait all jobs are completed
+//            // todo : Have to search another way for main thread to wait all jobs are completed
             for (CompletableFuture<Void> result : results) {
                 result.get();
             }
@@ -128,7 +127,6 @@ public class HttpServer {
         } else if (path.contains("/files/")) {
             final var absoluteFilePath = this.parentAbsolutePath + startLine.extractResourceId();
 
-            System.out.println("absolutepath " + absoluteFilePath);
             try {
                 final String fileContent = readFromFile(absoluteFilePath);
                 bufferedStream.write(HttpResponse.ofFile(fileContent).toString().getBytes());
@@ -140,14 +138,11 @@ public class HttpServer {
         }
     }
 
-
     private static String readFromFile(String path) {
         final var filePath = Paths.get(path);
-        try (final var bufferedFileReader = Files.newBufferedReader(filePath)) {
-            var readLines = bufferedFileReader.lines();
-            return readLines
-                    .peek(line -> System.out.println("LINE : " + line))
-                    .collect(Collectors.joining("\n"));
+        try {
+            final byte[] contents = Files.readAllBytes(filePath);
+            return new String(contents);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
