@@ -8,11 +8,11 @@ public class Main {
             System.out.printf("%dth arg : %s\n", count++, arg);
         }
 
+        String absoluteParentPath = null;
         if (args.length >= 2) {
-            final HttpServer httpServer = new HttpServer(4221, args[1]);
-            httpServer.run();
-        } else {
-            System.out.println("Any Parent directory path information has been passed");
+            absoluteParentPath = args[1];
         }
+        final HttpServer httpServer = new HttpServer(4221, absoluteParentPath);
+        httpServer.run();
     }
 }
