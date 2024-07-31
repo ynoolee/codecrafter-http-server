@@ -123,8 +123,10 @@ public class HttpServer {
             final String requestBody = request.requestBody();
             final String resourceId = startLine.extractResourceId();
             final String absolutePath = this.parentAbsolutePath + resourceId;
-            final FileWriter fileWriter = new FileWriter(new File(absolutePath));
-            fileWriter.write(requestBody);
+            try (final FileWriter writer = new FileWriter(absolutePath);) {
+                writer.write(requestBody);
+                writer.flush();
+            }
 
             bufferedStream.write(CommonHttpResponse.CREATED.getBytes());
         }
