@@ -1,3 +1,4 @@
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -9,12 +10,23 @@ public record Headers(
         this.headers = Map.copyOf(headers);
     }
 
+    public Headers deepCopy() {
+        final Map<String, String> newMap = new HashMap<>();
+        headers.keySet().forEach(key -> newMap.put(key, headers.get(key)));
+
+        return new Headers(newMap);
+    }
+
     public Optional<String> headerValue(String headerKey) {
         return Optional.ofNullable(headers.get(headerKey));
     }
 
     public enum Header {
-        USER_AGENT("User-Agent");
+
+        USER_AGENT("User-Agent")
+        , CONTENT_TYPE_HEADER("Content-Type")
+        , CONTENT_LENGTH_HEADER("Content-Length")
+        ;
 
         private final String value;
 

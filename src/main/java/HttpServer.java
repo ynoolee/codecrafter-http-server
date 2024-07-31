@@ -10,11 +10,8 @@ import java.util.concurrent.ExecutionException;
 public class HttpServer {
 
     private final int port;
-
     private final String parentAbsolutePath;
 
-    private static final String OK_RESPONSE = "HTTP/1.1 200 OK\r\n\r\n";
-    private static final String NOT_FOUND_RESOURCE_RESPONSE = "HTTP/1.1 404 Not Found\r\n\r\n";
 
     public HttpServer(final int port, final String parentAbsolutePath) {
         this.port = port;
@@ -39,7 +36,6 @@ public class HttpServer {
                 }));
             }
 
-//            // todo : Have to search another way for main thread to wait all jobs are completed
             for (CompletableFuture<Void> result : results) {
                 result.get();
             }
@@ -52,30 +48,6 @@ public class HttpServer {
         }
     }
 
-//    private void runConcurrentlyBy(int threadCount, ServerSocket serverSocket) {
-//        final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
-//
-//        for (int i = 0; i < threadCount; i++) {
-//            CompletableFuture.runAsync(() -> {
-//                try {
-//                    System.out.printf("Thread %s Is ServerSocket closed just before calling accept? %s\n",
-//                            Thread.currentThread().getName(), serverSocket.isClosed()
-//                    );
-//                    acceptAndRespond(serverSocket);
-//                } catch (IOException e) {
-//                    System.out.printf("Exception on thread %s - cause : %s \n message: %s \n", Thread.currentThread().getName(),e.getCause(), e.getMessage());
-//                }
-//            }, threadPool).whenCompleteAsync((a, b) -> {
-//                System.out.printf("%s thread response complete%n", Thread.currentThread().getName());
-//            }).exceptionally((ex) -> {
-//                System.out.println(Arrays.toString(ex.getStackTrace()));
-//                System.out.printf("%s thread exception :%s - %s%n"
-//                        , Thread.currentThread().getName(), ex.getClass().getName(), ex.getMessage());
-//                return null;
-//            });
-//        }
-//    }
-
     private void acceptAndRespond(final ServerSocket serverSocket) throws IOException {
         try (final Socket clientSocket = serverSocket.accept();
              final InputStream inputStream = clientSocket.getInputStream();
@@ -86,21 +58,16 @@ public class HttpServer {
             );
             final BufferedOutputStream bufferedStream = new BufferedOutputStream(outputStream);
 
-            final String message = readHttpMessageNotContainingBody(inputStream);
+            final HttpRequest message = readHttpRequestMessage(inputStream);
 
-            List<String> parts = parse(message, "\r\n");
-
-            final StartLine startLine = createStartLine(parts);
-            final Headers headers = createHeaders(parts.subList(1, parts.size()));
-
-            sendResponse(startLine, headers, bufferedStream);
+            sendResponse(message, bufferedStream);
 
             bufferedStream.flush();
         }
         System.out.println("Close HTTP connection");
     }
 
-    private Headers createHeaders(final List<String> headers) {
+    private static Headers createHeaders(final List<String> headers) {
         Map<String, String> map = new HashMap<>();
 
         for (String header : headers) {
@@ -111,13 +78,26 @@ public class HttpServer {
     }
 
     private void sendResponse(
-            final StartLine startLine
-            , final Headers headers
+            final HttpRequest request
             , final BufferedOutputStream bufferedStream
     ) throws IOException {
+        final StartLine startLine = request.startLine();
+        final Headers headers = request.headers();
         final String path = startLine.extractPath();
+        final HttpMethod method = startLine.method();
+
+        if (HttpMethod.POST.equals(method)) {
+            hanldePostMethod(request, bufferedStream, path, startLine);
+        } else if (HttpMethod.GET.equals(method)) {
+            handleGetMethod(bufferedStream, path, startLine, headers);
+        } else {
+            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+        }
+    }
+
+    private void handleGetMethod(final BufferedOutputStream bufferedStream, final String path, final StartLine startLine, final Headers headers) throws IOException {
         if ("/".equals(path)) {
-            bufferedStream.write(OK_RESPONSE.getBytes());
+            bufferedStream.write(CommonHttpResponse.OK_RESPONSE.getBytes());
         } else if (path.contains("/echo/")) {
             final HttpResponse response = HttpResponse.ofPlainText(startLine.extractResourceId());
             bufferedStream.write(response.toString().getBytes());
@@ -125,16 +105,28 @@ public class HttpServer {
             final HttpResponse response = HttpResponse.ofPlainText(headers.headerValue("User-Agent").orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
             bufferedStream.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
-            final var absoluteFilePath = this.parentAbsolutePath + startLine.extractResourceId();
+            writeFileToResponse(bufferedStream, this.parentAbsolutePath + startLine.extractResourceId());
+        }
+    }
 
-            try {
-                final String fileContent = readFromFile(absoluteFilePath);
-                bufferedStream.write(HttpResponse.ofFile(fileContent).toString().getBytes());
-            } catch (Exception ex) {
-                bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
-            }
-        } else {
-            bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+    private void writeFileToResponse(final BufferedOutputStream bufferedStream, final String absoluteFilePath) throws IOException {
+        try {
+            final String fileContent = readFromFile(absoluteFilePath);
+            bufferedStream.write(HttpResponse.ofFile(fileContent).toString().getBytes());
+        } catch (Exception ex) {
+            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+        }
+    }
+
+    private void hanldePostMethod(final HttpRequest request, final BufferedOutputStream bufferedStream, final String path, final StartLine startLine) throws IOException {
+        if (path.contains("/files/")) {
+            final String requestBody = request.requestBody();
+            final String resourceId = startLine.extractResourceId();
+            final String absolutePath = this.parentAbsolutePath + resourceId;
+            final FileWriter fileWriter = new FileWriter(new File(absolutePath));
+            fileWriter.write(requestBody);
+
+            bufferedStream.write(CommonHttpResponse.CREATED.getBytes());
         }
     }
 
@@ -153,7 +145,7 @@ public class HttpServer {
      * Just detecting Header terminator ( CRLF Followed by CRLF )
      * is only thing reading Http message.
      */
-    private static String readHttpMessageNotContainingBody(InputStream inputStream) throws IOException {
+    private static HttpRequest readHttpRequestMessage(InputStream inputStream) throws IOException {
         final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
         final char[] tempMessageContainer = new char[4096];
         int curIdx = 0;
@@ -175,9 +167,33 @@ public class HttpServer {
             }
         }
 
-        char[] finalMessage = truncateAndCreateArray(tempMessageContainer, curIdx - 4);
+        HttpRequest request = createHttpRequest(tempMessageContainer, curIdx);
 
-        return new String(finalMessage);
+        if (request.headers().headerValue(Headers.Header.CONTENT_LENGTH_HEADER.getValue()).isEmpty()) {
+            return request;
+        }
+        final Integer contentLength = request.headers().headerValue(Headers.Header.CONTENT_LENGTH_HEADER.getValue()).map(value -> Integer.valueOf(value)).orElse(0);
+        char[] contents = new char[contentLength];
+        for (int i = 0; i < contentLength; i++) {
+            contents[i] = (char) reader.read();
+        }
+
+        return HttpRequest.HttpRequestBuilder.builder().startLine(request.startLine()).headers(request.headers().deepCopy()).responseBody(new String(contents)).build();
+    }
+
+    private static HttpRequest createHttpRequest(final char[] startLineAndHeaders, final int curIdx) {
+        char[] trucatedStartLineAndHeaders = truncateAndCreateArray(startLineAndHeaders, curIdx - 4);
+
+        List<String> parts = parse(new String(trucatedStartLineAndHeaders), "\r\n");
+
+        final StartLine startLine = createStartLine(parts);
+        final Headers headers = createHeaders(parts.subList(1, parts.size()));
+
+
+        return HttpRequest.HttpRequestBuilder.builder()
+                .startLine(startLine)
+                .headers(headers.deepCopy())
+                .build();
     }
 
     private static char[] truncateAndCreateArray(char[] array, int length) {
@@ -197,6 +213,6 @@ public class HttpServer {
             throw new RuntimeException("message 가 비어있습니다");
         }
 
-        return new StartLine(messageParts.get(0));
+        return StartLine.of(messageParts.get(0));
     }
 }
