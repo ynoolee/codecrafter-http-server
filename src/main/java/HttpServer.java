@@ -90,8 +90,6 @@ public class HttpServer {
             hanldePostMethod(request, bufferedStream, path, startLine);
         } else if (HttpMethod.GET.equals(method)) {
             handleGetMethod(bufferedStream, path, startLine, headers);
-        } else {
-            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
@@ -106,6 +104,8 @@ public class HttpServer {
             bufferedStream.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
             writeFileToResponse(bufferedStream, this.parentAbsolutePath + startLine.extractResourceId());
+        } else {
+            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
@@ -129,6 +129,8 @@ public class HttpServer {
             }
 
             bufferedStream.write(CommonHttpResponse.CREATED.getBytes());
+        } else {
+            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
