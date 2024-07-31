@@ -2,15 +2,10 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class HttpServer {
@@ -28,46 +23,68 @@ public class HttpServer {
     }
 
     public void run() {
-
         try (ServerSocket serverSocket = new ServerSocket(this.port)) {
+            serverSocket.setReuseAddress(true);
             System.out.println("HTTP server started on port " + port);
 
-            final int threadCount = 2;
+            final int threadCount = 10;
 
-            runConcurrentlyBy(threadCount, serverSocket);
+            List<CompletableFuture<Void>> results = new ArrayList<>(threadCount);
+            for (int i = 0; i < threadCount; i++) {
+                results.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        acceptAndRespond(serverSocket);
+                    } catch (IOException e) {
+                        System.out.println("Error");
+                    }
+                }));
+            }
 
+            // todo : Have to search another way for main thread to wait all jobs are completed
+            for (CompletableFuture<Void> result : results) {
+                result.get();
+            }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private void runConcurrentlyBy(int threadCount, ServerSocket serverSocket) {
-        final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
-
-        for (int i = 0; i < threadCount; i++) {
-
-            CompletableFuture.runAsync(() -> {
-                try {
-                    acceptAndRespond(serverSocket);
-                } catch (IOException e) {
-                    System.out.println("Error");
-                }
-            }, threadPool).whenComplete((a, b) -> {
-                System.out.printf("%s thread response complete%n", Thread.currentThread().getName());
-            }).exceptionally((ex) -> {
-                System.out.println(Arrays.toString(ex.getStackTrace()));
-                System.out.printf("%s thread exception :%s - %s%n"
-                        , Thread.currentThread().getName(), ex.getClass().getName(), ex.getMessage());
-                return null;
-            });
-        }
-    }
+//    private void runConcurrentlyBy(int threadCount, ServerSocket serverSocket) {
+//        final ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
+//
+//        for (int i = 0; i < threadCount; i++) {
+//            CompletableFuture.runAsync(() -> {
+//                try {
+//                    System.out.printf("Thread %s Is ServerSocket closed just before calling accept? %s\n",
+//                            Thread.currentThread().getName(), serverSocket.isClosed()
+//                    );
+//                    acceptAndRespond(serverSocket);
+//                } catch (IOException e) {
+//                    System.out.printf("Exception on thread %s - cause : %s \n message: %s \n", Thread.currentThread().getName(),e.getCause(), e.getMessage());
+//                }
+//            }, threadPool).whenCompleteAsync((a, b) -> {
+//                System.out.printf("%s thread response complete%n", Thread.currentThread().getName());
+//            }).exceptionally((ex) -> {
+//                System.out.println(Arrays.toString(ex.getStackTrace()));
+//                System.out.printf("%s thread exception :%s - %s%n"
+//                        , Thread.currentThread().getName(), ex.getClass().getName(), ex.getMessage());
+//                return null;
+//            });
+//        }
+//    }
 
     private void acceptAndRespond(final ServerSocket serverSocket) throws IOException {
         try (final Socket clientSocket = serverSocket.accept();
              final InputStream inputStream = clientSocket.getInputStream();
              final OutputStream outputStream = clientSocket.getOutputStream();
         ) {
+            System.out.printf("Thread %s Is ServerSocket closed just after creating clientSocket? %s\n",
+                    Thread.currentThread().getName(), serverSocket.isClosed()
+            );
             final BufferedOutputStream bufferedStream = new BufferedOutputStream(outputStream);
 
             final String message = readHttpMessageNotContainingBody(inputStream);
@@ -115,7 +132,7 @@ public class HttpServer {
             try {
                 final String fileContent = readFromFile(absoluteFilePath);
                 bufferedStream.write(HttpResponse.ofFile(fileContent).toString().getBytes());
-            } catch (InvalidPathException ex) {
+            } catch (Exception ex) {
                 bufferedStream.write(NOT_FOUND_RESOURCE_RESPONSE.getBytes());
             }
         } else {
