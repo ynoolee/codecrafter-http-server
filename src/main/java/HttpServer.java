@@ -32,7 +32,7 @@ public class HttpServer {
         try (ServerSocket serverSocket = new ServerSocket(this.port)) {
             System.out.println("HTTP server started on port " + port);
 
-            final int threadCount = 10;
+            final int threadCount = 2;
 
             runConcurrentlyBy(threadCount, serverSocket);
 
