@@ -1,15 +1,39 @@
+import java.util.Optional;
 
-public record HttpRequest(
+public class HttpRequest {
 
-        StartLine startLine,
-        Headers headers,
-        String requestBody
-) {
+    private final StartLine startLine;
+    private final Headers headers;
+    private final String requestBody;
 
     public HttpRequest(final StartLine startLine, final Headers headers, final String requestBody) {
         this.startLine = startLine;
         this.headers = headers;
         this.requestBody = requestBody;
+    }
+
+    public boolean hasMessageBody() {
+        return headers.headerValue(HttpHeader.CONTENT_LENGTH_HEADER).isEmpty();
+    }
+
+    public Optional<String> headerValue(HttpHeader header) {
+        return this.headers.headerValue(header);
+    }
+
+    public HttpRequest createWithNewBody(String body) {
+        return HttpRequest.HttpRequestBuilder.builder()
+                .startLine(startLine)
+                .headers(headers.deepCopy())
+                .responseBody(body)
+                .build();
+    }
+
+    public StartLine getStartLine() {
+        return startLine;
+    }
+
+    public String getRequestBody() {
+        return requestBody;
     }
 
     public static class HttpRequestBuilder {

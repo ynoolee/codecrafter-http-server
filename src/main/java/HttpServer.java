@@ -3,7 +3,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -56,71 +57,62 @@ public class HttpServer {
             System.out.printf("Thread %s Is ServerSocket closed just after creating clientSocket? %s\n",
                     Thread.currentThread().getName(), serverSocket.isClosed()
             );
-            final BufferedOutputStream bufferedStream = new BufferedOutputStream(outputStream);
+            final BufferedOutputStream output = new BufferedOutputStream(outputStream);
 
-            final HttpRequest message = readHttpRequestMessage(inputStream);
+            final HttpRequest message = HttpMessageParseUtil.readHttpRequestMessage(inputStream);
 
-            sendResponse(message, bufferedStream);
+            sendResponse(message, output);
 
-            bufferedStream.flush();
+            output.flush();
         }
         System.out.println("Close HTTP connection");
     }
 
-    private static Headers createHeaders(final List<String> headers) {
-        Map<String, String> map = new HashMap<>();
-
-        for (String header : headers) {
-            String[] part = Arrays.stream(header.split(":")).map(String::trim).toArray(String[]::new);
-            map.put(part[0], part[1]);
-        }
-        return new Headers(map);
-    }
-
     private void sendResponse(
             final HttpRequest request
-            , final BufferedOutputStream bufferedStream
+            , final BufferedOutputStream output
     ) throws IOException {
-        final StartLine startLine = request.startLine();
-        final Headers headers = request.headers();
+        final StartLine startLine = request.getStartLine();
         final String path = startLine.extractPath();
         final HttpMethod method = startLine.method();
 
         if (HttpMethod.POST.equals(method)) {
-            hanldePostMethod(request, bufferedStream, path, startLine);
+            hanldePostMethod(request, output, path);
         } else if (HttpMethod.GET.equals(method)) {
-            handleGetMethod(bufferedStream, path, startLine, headers);
+            handleGetMethod(output, path, request);
         }
     }
 
-    private void handleGetMethod(final BufferedOutputStream bufferedStream, final String path, final StartLine startLine, final Headers headers) throws IOException {
+    private void handleGetMethod(final BufferedOutputStream output, final String path, HttpRequest request) throws IOException {
+        final StartLine startLine = request.getStartLine();
         if ("/".equals(path)) {
-            bufferedStream.write(CommonHttpResponse.OK_RESPONSE.getBytes());
+            output.write(CommonHttpResponse.OK_RESPONSE.getBytes());
         } else if (path.contains("/echo/")) {
             final HttpResponse response = HttpResponse.ofPlainText(startLine.extractResourceId());
-            bufferedStream.write(response.toString().getBytes());
+            output.write(response.toString().getBytes());
         } else if (path.contains("/user-agent")) {
-            final HttpResponse response = HttpResponse.ofPlainText(headers.headerValue("User-Agent").orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
-            bufferedStream.write(response.toString().getBytes());
+            final HttpResponse response = HttpResponse.ofPlainText(request.headerValue(HttpHeader.USER_AGENT).orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
+            output.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
-            writeFileToResponse(bufferedStream, this.parentAbsolutePath + startLine.extractResourceId());
+            writeFileToResponse(output, this.parentAbsolutePath + startLine.extractResourceId());
         } else {
-            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+            output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
-    private void writeFileToResponse(final BufferedOutputStream bufferedStream, final String absoluteFilePath) throws IOException {
+    private void writeFileToResponse(final BufferedOutputStream output, final String absoluteFilePath) throws IOException {
         try {
             final String fileContent = readFromFile(absoluteFilePath);
-            bufferedStream.write(HttpResponse.ofFile(fileContent).toString().getBytes());
+            output.write(HttpResponse.ofFile(fileContent).toString().getBytes());
         } catch (Exception ex) {
-            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+            output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
-    private void hanldePostMethod(final HttpRequest request, final BufferedOutputStream bufferedStream, final String path, final StartLine startLine) throws IOException {
+    private void hanldePostMethod(final HttpRequest request, final BufferedOutputStream output, final String path) throws IOException {
+        final StartLine startLine = request.getStartLine();
         if (path.contains("/files/")) {
-            final String requestBody = request.requestBody();
+            final String requestBody = request.getRequestBody();
             final String resourceId = startLine.extractResourceId();
             final String absolutePath = this.parentAbsolutePath + resourceId;
             try (final FileWriter writer = new FileWriter(absolutePath);) {
@@ -128,9 +120,9 @@ public class HttpServer {
                 writer.flush();
             }
 
-            bufferedStream.write(CommonHttpResponse.CREATED.getBytes());
+            output.write(CommonHttpResponse.CREATED.getBytes());
         } else {
-            bufferedStream.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
+            output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
     }
 
@@ -142,81 +134,5 @@ public class HttpServer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * In this case where Http Message does not contain any message body,
-     * Just detecting Header terminator ( CRLF Followed by CRLF )
-     * is only thing reading Http message.
-     */
-    private static HttpRequest readHttpRequestMessage(InputStream inputStream) throws IOException {
-        final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        final char[] tempMessageContainer = new char[4096];
-        int curIdx = 0;
-
-        while (true) {
-            char readChar = (char) reader.read();
-
-            tempMessageContainer[curIdx++] = readChar;
-
-            // detect Header terminator
-            if (readChar == '\n') {
-                if (curIdx >= 4
-                        && tempMessageContainer[curIdx - 2] == '\r'
-                        && tempMessageContainer[curIdx - 3] == '\n'
-                        && tempMessageContainer[curIdx - 4] == '\r'
-                ) {
-                    break;
-                }
-            }
-        }
-
-        HttpRequest request = createHttpRequest(tempMessageContainer, curIdx);
-
-        if (request.headers().headerValue(Headers.Header.CONTENT_LENGTH_HEADER.getValue()).isEmpty()) {
-            return request;
-        }
-        final Integer contentLength = request.headers().headerValue(Headers.Header.CONTENT_LENGTH_HEADER.getValue()).map(value -> Integer.valueOf(value)).orElse(0);
-        char[] contents = new char[contentLength];
-        for (int i = 0; i < contentLength; i++) {
-            contents[i] = (char) reader.read();
-        }
-
-        return HttpRequest.HttpRequestBuilder.builder().startLine(request.startLine()).headers(request.headers().deepCopy()).responseBody(new String(contents)).build();
-    }
-
-    private static HttpRequest createHttpRequest(final char[] startLineAndHeaders, final int curIdx) {
-        char[] trucatedStartLineAndHeaders = truncateAndCreateArray(startLineAndHeaders, curIdx - 4);
-
-        List<String> parts = parse(new String(trucatedStartLineAndHeaders), "\r\n");
-
-        final StartLine startLine = createStartLine(parts);
-        final Headers headers = createHeaders(parts.subList(1, parts.size()));
-
-
-        return HttpRequest.HttpRequestBuilder.builder()
-                .startLine(startLine)
-                .headers(headers.deepCopy())
-                .build();
-    }
-
-    private static char[] truncateAndCreateArray(char[] array, int length) {
-        final char[] result = new char[length];
-
-        System.arraycopy(array, 0, result, 0, result.length);
-
-        return result;
-    }
-
-    private static List<String> parse(String request, String delimiter) {
-        return Arrays.stream(request.split(delimiter)).toList();
-    }
-
-    private static StartLine createStartLine(List<String> messageParts) {
-        if (messageParts == null || messageParts.isEmpty()) {
-            throw new RuntimeException("message 가 비어있습니다");
-        }
-
-        return StartLine.of(messageParts.get(0));
     }
 }
