@@ -7,9 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 
 public class HttpServer {
 
+    private static final Logger logger = Logger.getLogger(HttpServer.class.getName());
     private final int port;
     private final String parentAbsolutePath;
 
@@ -54,9 +56,6 @@ public class HttpServer {
              final InputStream inputStream = clientSocket.getInputStream();
              final OutputStream outputStream = clientSocket.getOutputStream();
         ) {
-            System.out.printf("Thread %s Is ServerSocket closed just after creating clientSocket? %s\n",
-                    Thread.currentThread().getName(), serverSocket.isClosed()
-            );
             final BufferedOutputStream output = new BufferedOutputStream(outputStream);
 
             final HttpRequest message = HttpMessageParseUtil.readHttpRequestMessage(inputStream);
@@ -64,8 +63,9 @@ public class HttpServer {
             sendResponse(message, output);
 
             output.flush();
+            output.close();
         }
-        System.out.println("Close HTTP connection");
+        logger.info("Close HTTP connection");
     }
 
     private void sendResponse(
@@ -91,7 +91,7 @@ public class HttpServer {
             final HttpResponse response = HttpResponse.ofPlainText(startLine.extractResourceId());
             output.write(response.toString().getBytes());
         } else if (path.contains("/user-agent")) {
-            final HttpResponse response = HttpResponse.ofPlainText(request.headerValue(HttpHeader.USER_AGENT).orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
+            final HttpResponse response = HttpResponse.ofPlainText(request.valueOfKey(HttpHeader.USER_AGENT).orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
             output.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
             writeFileToResponse(output, this.parentAbsolutePath + startLine.extractResourceId());
@@ -112,14 +112,16 @@ public class HttpServer {
     private void hanldePostMethod(final HttpRequest request, final BufferedOutputStream output, final String path) throws IOException {
         final StartLine startLine = request.getStartLine();
         if (path.contains("/files/")) {
-            final String requestBody = request.getRequestBody();
+            final String requestBody = request.getBody();
+            logger.info("Read RequestBody : " + requestBody);
             final String resourceId = startLine.extractResourceId();
             final String absolutePath = this.parentAbsolutePath + resourceId;
-            try (final FileWriter writer = new FileWriter(absolutePath);) {
+            try (final FileWriter writer = new FileWriter(absolutePath)) {
+                logger.info("File path :"+absolutePath);
                 writer.write(requestBody);
                 writer.flush();
             }
-
+            logger.info("Complete Writing file");
             output.write(CommonHttpResponse.CREATED.getBytes());
         } else {
             output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
