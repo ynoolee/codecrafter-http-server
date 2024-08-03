@@ -17,7 +17,7 @@ record Headers(
         return new Headers(newMap);
     }
 
-    public Optional<String> headerValue(HttpHeader header) {
+    public Optional<String> valueOfKey(HttpHeader header) {
         return Optional.ofNullable(headers.get(header));
     }
 }

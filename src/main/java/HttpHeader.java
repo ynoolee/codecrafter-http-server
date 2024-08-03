@@ -6,8 +6,8 @@ import java.util.Optional;
 public enum HttpHeader {
 
     USER_AGENT("User-Agent")
-    , CONTENT_TYPE_HEADER("Content-Type")
-    , CONTENT_LENGTH_HEADER("Content-Length")
+    , CONTENT_TYPE("Content-Type")
+    , CONTENT_LENGTH("Content-Length")
     ;
 
     private static final Map<String, HttpHeader> headerMap = new HashMap<>();

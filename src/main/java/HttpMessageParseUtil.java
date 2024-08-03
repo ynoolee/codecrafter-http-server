@@ -6,84 +6,87 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class HttpMessageParseUtil {
 
+    private static final Logger logger = Logger.getLogger(HttpMessageParseUtil.class.getName());
+
     public static HttpRequest readHttpRequestMessage(InputStream inputStream) throws IOException {
         final BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        final char[] tempMessageContainer = new char[4096];
+        HttpRequest request = createHttpRequestUntilBody(reader);
+
+        if (request.hasEmptyBody()) {
+            return request;
+        }
+
+        final int contentLength = request.valueOfKey(HttpHeader.CONTENT_LENGTH)
+                .map(Integer::valueOf).orElse(0);
+
+        logger.info("content length : " + contentLength);
+        StringBuilder content = new StringBuilder();
+        int contentSize = 0;
+        while (contentSize < contentLength) {
+            String readCharStr = String.valueOf((char) reader.read());
+            int readCharSize = readCharStr.getBytes().length;
+            content.append(readCharStr);
+            contentSize += readCharSize;
+        }
+
+        return request.withBody(content.toString());
+    }
+
+    private static HttpRequest createHttpRequestUntilBody(final BufferedReader reader) throws IOException {
+        StringBuilder sb = new StringBuilder();
         int curIdx = 0;
 
         // read until header terminator from inputstream
         while (true) {
             char readChar = (char) reader.read();
-
-            tempMessageContainer[curIdx++] = readChar;
-
+            sb.append(readChar);
+            curIdx++;
             // detect Header terminator
             if (readChar == '\n') {
                 if (curIdx >= 4
-                        && tempMessageContainer[curIdx - 2] == '\r'
-                        && tempMessageContainer[curIdx - 3] == '\n'
-                        && tempMessageContainer[curIdx - 4] == '\r'
+                        && sb.charAt(curIdx - 2) == '\r'
+                        && sb.charAt(curIdx - 3) == '\n'
+                        && sb.charAt(curIdx - 4) == '\r'
                 ) {
                     break;
                 }
             }
         }
 
-        HttpRequest request = createHttpRequest(tempMessageContainer, curIdx);
-
-        if (request.hasMessageBody()) {
-            return request;
-        }
-
-        final Integer contentLength =
-                request.headerValue(HttpHeader.CONTENT_LENGTH_HEADER)
-                        .map(Integer::valueOf).orElse(0);
-        char[] contents = new char[contentLength];
-        for (int i = 0; i < contentLength; i++) {
-            contents[i] = (char) reader.read();
-        }
-
-        return request.createWithNewBody(String.valueOf(contents));
+        return createHttpRequest(sb.toString());
     }
 
-    private static HttpRequest createHttpRequest(final char[] startLineAndHeaders, final int curIdx) {
-        char[] trucatedStartLineAndHeaders = truncateAndCreateArray(startLineAndHeaders, curIdx - 4);
+    private static HttpRequest createHttpRequest(final String startLineAndHeaders) {
+        List<String> lines = Arrays.stream(startLineAndHeaders.split("\r\n")).toList();
 
-        List<String> parts = parse(new String(trucatedStartLineAndHeaders), "\r\n");
+        final StartLine startLine = createStartLine(lines); // first line is start-line
+        final Headers headers = createHeaders(lines.subList(1, lines.size())); // The rest part is headers
 
-        final StartLine startLine = createStartLine(parts);
-        final Headers headers = createHeaders(parts.subList(1, parts.size()));
-
-        return HttpRequest.HttpRequestBuilder.builder()
+        return HttpRequest.builder()
                 .startLine(startLine)
                 .headers(headers.deepCopy())
                 .build();
     }
 
-
     private static Headers createHeaders(final List<String> headers) {
         Map<HttpHeader, String> map = new HashMap<>();
 
-        for (String header : headers) {
-            String[] part = Arrays.stream(header.split(":")).map(String::trim).toArray(String[]::new);
-            HttpHeader.of(part[0]).map(key -> map.put(key, part[1]));
-        }
+        headers.stream()
+                .map(headerLine -> Arrays.stream(headerLine.split(":")).map(String::trim).toArray(String[]::new))
+                .forEach(headerKeyValue -> HttpHeader.of(headerKeyValue[0]).map(key -> map.put(key, headerKeyValue[1])));
         return new Headers(map);
     }
 
-    private static char[] truncateAndCreateArray(char[] array, int length) {
+    private static char[] clearTheRestPart(char[] array, int length) {
         final char[] result = new char[length];
 
         System.arraycopy(array, 0, result, 0, result.length);
 
         return result;
-    }
-
-    private static List<String> parse(String request, String delimiter) {
-        return Arrays.stream(request.split(delimiter)).toList();
     }
 
     private static StartLine createStartLine(List<String> messageParts) {

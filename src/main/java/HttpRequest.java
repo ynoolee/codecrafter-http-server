@@ -1,30 +1,27 @@
 import java.util.Optional;
 
 public class HttpRequest {
-
     private final StartLine startLine;
     private final Headers headers;
-    private final String requestBody;
+    private final String body;
 
-    public HttpRequest(final StartLine startLine, final Headers headers, final String requestBody) {
-        this.startLine = startLine;
-        this.headers = headers;
-        this.requestBody = requestBody;
+    private HttpRequest(Builder builder) {
+        this.startLine = builder.startLine;
+        this.headers = builder.headers;
+        this.body = builder.body;
     }
 
-    public boolean hasMessageBody() {
-        return headers.headerValue(HttpHeader.CONTENT_LENGTH_HEADER).isEmpty();
+    public boolean hasEmptyBody() {
+        return headers.valueOfKey(HttpHeader.CONTENT_LENGTH).isEmpty();
     }
 
-    public Optional<String> headerValue(HttpHeader header) {
-        return this.headers.headerValue(header);
+    public Optional<String> valueOfKey(HttpHeader header) {
+        return headers.valueOfKey(header);
     }
 
-    public HttpRequest createWithNewBody(String body) {
-        return HttpRequest.HttpRequestBuilder.builder()
-                .startLine(startLine)
-                .headers(headers.deepCopy())
-                .responseBody(body)
+    public HttpRequest withBody(String newBody) {
+        return new Builder(this)
+                .body(newBody)
                 .build();
     }
 
@@ -32,39 +29,44 @@ public class HttpRequest {
         return startLine;
     }
 
-    public String getRequestBody() {
-        return requestBody;
+    public String getBody() {
+        return body;
     }
 
-    public static class HttpRequestBuilder {
+    public static class Builder {
         private StartLine startLine;
         private Headers headers;
-        private String responseBody;
+        private String body;
 
-        private HttpRequestBuilder(final StartLine startLine, final Headers headers, final String responseBody) {
+        public Builder() {}
+
+        private Builder(HttpRequest request) {
+            this.startLine = request.startLine;
+            this.headers = request.headers.deepCopy();
+            this.body = request.body;
+        }
+
+        public Builder startLine(StartLine startLine) {
             this.startLine = startLine;
+            return this;
+        }
+
+        public Builder headers(Headers headers) {
             this.headers = headers;
-            this.responseBody = responseBody;
+            return this;
         }
 
-        public static HttpRequestBuilder builder() {
-            return new HttpRequestBuilder(null, null, null);
-        }
-
-        public HttpRequestBuilder startLine(StartLine startLine) {
-            return new HttpRequestBuilder(startLine, this.headers, this.responseBody);
-        }
-
-        public HttpRequestBuilder headers(Headers headers) {
-            return new HttpRequestBuilder(this.startLine, headers.deepCopy(), this.responseBody);
-        }
-
-        public HttpRequestBuilder responseBody(String responseBody) {
-            return new HttpRequestBuilder(this.startLine, this.headers, responseBody);
+        public Builder body(String body) {
+            this.body = body;
+            return this;
         }
 
         public HttpRequest build() {
-            return new HttpRequest(startLine, headers, responseBody);
+            return new HttpRequest(this);
         }
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 }
