@@ -88,10 +88,14 @@ public class HttpServer {
         if ("/".equals(path)) {
             output.write(CommonHttpResponse.OK_RESPONSE.getBytes());
         } else if (path.contains("/echo/")) {
-            final HttpResponse response = HttpResponse.ofPlainText(startLine.extractResourceId());
+            final HttpResponse response = HttpResponse.of(startLine.extractResourceId(), HttpHeader.ContentType.TEXT_PLAIN);
             output.write(response.toString().getBytes());
         } else if (path.contains("/user-agent")) {
-            final HttpResponse response = HttpResponse.ofPlainText(request.valueOfKey(HttpHeader.USER_AGENT).orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다")));
+            final HttpResponse response =
+                    HttpResponse.of(
+                            request.valueOfKey(HttpHeader.USER_AGENT).orElseThrow(() -> new RuntimeException("user-agent 에 값이 없습니다"))
+                            , HttpHeader.ContentType.BINARY_DATE
+                    );
             output.write(response.toString().getBytes());
         } else if (path.contains("/files/")) {
             writeFileToResponse(output, this.parentAbsolutePath + startLine.extractResourceId());
@@ -103,7 +107,7 @@ public class HttpServer {
     private void writeFileToResponse(final BufferedOutputStream output, final String absoluteFilePath) throws IOException {
         try {
             final String fileContent = readFromFile(absoluteFilePath);
-            output.write(HttpResponse.ofFile(fileContent).toString().getBytes());
+            output.write(HttpResponse.of(fileContent, HttpHeader.ContentType.BINARY_DATE).toString().getBytes());
         } catch (Exception ex) {
             output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
         }
@@ -117,7 +121,7 @@ public class HttpServer {
             final String resourceId = startLine.extractResourceId();
             final String absolutePath = this.parentAbsolutePath + resourceId;
             try (final FileWriter writer = new FileWriter(absolutePath)) {
-                logger.info("File path :"+absolutePath);
+                logger.info("File path :" + absolutePath);
                 writer.write(requestBody);
                 writer.flush();
             }
@@ -131,7 +135,7 @@ public class HttpServer {
     private static String readFromFile(String path) {
         final var filePath = Paths.get(path);
         try {
-            final byte[] contents = Files.readAllBytes(filePath);
+            final var contents = Files.readAllBytes(filePath);
             return new String(contents);
         } catch (IOException e) {
             throw new RuntimeException(e);

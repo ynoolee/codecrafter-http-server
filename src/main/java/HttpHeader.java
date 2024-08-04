@@ -30,4 +30,21 @@ public enum HttpHeader {
     public String getValue() {
         return value;
     }
+
+    public enum ContentType {
+
+        TEXT_PLAIN("text/plain")
+        , BINARY_DATE("application/octet-stream")
+        ;
+
+        private final String detailType;
+
+        ContentType(final String detailType) {
+            this.detailType = detailType;
+        }
+
+        public String getDetailType() {
+            return detailType;
+        }
+    }
 }
