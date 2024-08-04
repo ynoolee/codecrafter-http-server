@@ -2,51 +2,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public record HttpResponse<T>(
+public record HttpResponse(
 
         String statusLine
 
         , Map<String, String> headers
 
-        , T body
+        , String body
 ) {
     private final static String CRLF = "\r\n";
 
-    private final static String OK = "HTTP/1.1 200 OK";
+    public static HttpResponse of(String body, HttpHeader.ContentType contentType) {
+        Map<String, String> map = new HashMap<>();
+        map.put(HttpHeader.CONTENT_TYPE.getValue(), contentType.getDetailType() + CRLF);
+        map.put(HttpHeader.CONTENT_LENGTH.getValue(), body.getBytes().length + CRLF);
 
-    private final static String CONTENT_TYPE_HEADER = "Content-Type";
-
-    private final static String CONTENT_LENGTH_HEADER = "Content-Length";
-
-    // todo : 일단은 file data 도 stream 으로 출력
-    public static HttpResponse<String> ofPlainText(String body) {
-
-        final Map<String, String> map = new HashMap<>();
-        map.put(CONTENT_TYPE_HEADER, CONTENT_TYPE.TEXT_PLAIN.value + CRLF);
-        map.put(CONTENT_LENGTH_HEADER, String.valueOf(body.getBytes().length) + CRLF);
-
-        return new HttpResponse<String>(OK, map, body);
-    }
-
-    public static HttpResponse<String> ofFile(String body) {
-        final Map<String, String> map = new HashMap<>();
-        map.put(CONTENT_TYPE_HEADER, CONTENT_TYPE.BINARY_DATE.value + CRLF);
-        map.put(CONTENT_LENGTH_HEADER, body.getBytes().length + CRLF);
-
-        return new HttpResponse<>(OK, map, body);
-    }
-
-    private enum CONTENT_TYPE {
-
-        TEXT_PLAIN("text/plain")
-        , BINARY_DATE("application/octet-stream")
-        ;
-
-        private final String value;
-
-        CONTENT_TYPE(final String value) {
-            this.value = value;
-        }
+        return new HttpResponse(CommonHttpResponse.OK_RESPONSE, map, body);
     }
 
     @Override
@@ -56,11 +27,8 @@ public record HttpResponse<T>(
                 .map(key -> key + ": " + this.headers.get(key))
                 .collect(Collectors.joining());
 
-        return new StringBuilder(this.statusLine)
-                .append(CRLF)
-                .append(header)
-                .append(CRLF)
-                .append(body)
-                .toString();
+        return this.statusLine + CRLF +
+                header + CRLF +
+                body;
     }
 }
