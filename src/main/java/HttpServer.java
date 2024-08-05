@@ -3,10 +3,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 public class HttpServer {
@@ -22,32 +20,25 @@ public class HttpServer {
     }
 
     public void run() {
-        try (ServerSocket serverSocket = new ServerSocket(this.port)) {
+        int threadCount = 10;
+        try (
+                var serverSocket = new ServerSocket(this.port);
+                var threadPool = Executors.newFixedThreadPool(threadCount);
+        ) {
             serverSocket.setReuseAddress(true);
-            System.out.println("HTTP server started on port " + port);
+            logger.info("HTTP server started on port " + port);
 
-            final int threadCount = 10;
-
-            List<CompletableFuture<Void>> results = new ArrayList<>(threadCount);
             for (int i = 0; i < threadCount; i++) {
-                results.add(CompletableFuture.runAsync(() -> {
+                final CompletableFuture<Void> async = CompletableFuture.runAsync(() -> {
                     try {
                         acceptAndRespond(serverSocket);
                     } catch (IOException e) {
-                        System.out.println("Error");
+                        logger.warning("Error " + e.getMessage());
                     }
-                }));
-            }
-
-            for (CompletableFuture<Void> result : results) {
-                result.get();
+                }, threadPool);
             }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
