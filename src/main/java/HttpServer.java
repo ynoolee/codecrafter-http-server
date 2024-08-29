@@ -21,6 +21,7 @@ public class HttpServer {
 
     public void run() {
         int threadCount = 10;
+
         try (
                 var serverSocket = new ServerSocket(this.port);
                 var threadPool = Executors.newFixedThreadPool(threadCount);
@@ -29,7 +30,7 @@ public class HttpServer {
             logger.info("HTTP server started on port " + port);
 
             for (int i = 0; i < threadCount; i++) {
-                final CompletableFuture<Void> async = CompletableFuture.runAsync(() -> {
+                CompletableFuture.runAsync(() -> {
                     try {
                         acceptAndRespond(serverSocket);
                     } catch (IOException e) {
@@ -42,26 +43,28 @@ public class HttpServer {
         }
     }
 
+
     private void acceptAndRespond(final ServerSocket serverSocket) throws IOException {
         try (final Socket clientSocket = serverSocket.accept();
              final InputStream inputStream = clientSocket.getInputStream();
              final OutputStream outputStream = clientSocket.getOutputStream();
         ) {
-            final BufferedOutputStream output = new BufferedOutputStream(outputStream);
-
-            final HttpRequest message = HttpMessageParseUtil.readHttpRequestMessage(inputStream);
-
-            sendResponse(message, output);
-
-            output.flush();
-            output.close();
+            receiveAndRespondData(inputStream, outputStream);
         }
         logger.info("Close HTTP connection");
     }
 
+    private void receiveAndRespondData(final InputStream inputStream, final OutputStream outputStream) throws IOException {
+        final BufferedOutputStream output = new BufferedOutputStream(outputStream);
+
+        final HttpRequest message = HttpMessageParseUtil.readHttpRequestMessage(inputStream);
+
+        sendResponse(message, new BufferedOutputStream(outputStream));
+    }
+
     private void sendResponse(
             final HttpRequest request
-            , final BufferedOutputStream output
+            , final OutputStream output
     ) throws IOException {
         final StartLine startLine = request.getStartLine();
         final String path = startLine.extractPath();
@@ -72,9 +75,11 @@ public class HttpServer {
         } else if (HttpMethod.GET.equals(method)) {
             handleGetMethod(output, path, request);
         }
+
+        output.flush();
     }
 
-    private void handleGetMethod(final BufferedOutputStream output, final String path, HttpRequest request) throws IOException {
+    private void handleGetMethod(final OutputStream output, final String path, HttpRequest request) throws IOException {
         final StartLine startLine = request.getStartLine();
         if ("/".equals(path)) {
             output.write(CommonHttpResponse.OK_RESPONSE.getBytes());
@@ -95,7 +100,7 @@ public class HttpServer {
         }
     }
 
-    private void writeFileToResponse(final BufferedOutputStream output, final String absoluteFilePath) throws IOException {
+    private void writeFileToResponse(final OutputStream output, final String absoluteFilePath) throws IOException {
         try {
             final String fileContent = readFromFile(absoluteFilePath);
             output.write(HttpResponse.of(fileContent, HttpHeader.ContentType.BINARY_DATE).toString().getBytes());
@@ -104,7 +109,7 @@ public class HttpServer {
         }
     }
 
-    private void hanldePostMethod(final HttpRequest request, final BufferedOutputStream output, final String path) throws IOException {
+    private void hanldePostMethod(final HttpRequest request, final OutputStream output, final String path) throws IOException {
         final StartLine startLine = request.getStartLine();
         if (path.contains("/files/")) {
             final String requestBody = request.getBody();
