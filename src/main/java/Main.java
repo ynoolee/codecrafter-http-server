@@ -12,7 +12,7 @@ public class Main {
         if (args.length >= 2) {
             absoluteParentPath = args[1];
         }
-        final HttpServer httpServer = new HttpServer(4221, absoluteParentPath);
+        final NioHttpServer httpServer = new NioHttpServer(4222, absoluteParentPath);
         httpServer.run();
     }
 }

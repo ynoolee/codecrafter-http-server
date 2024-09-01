@@ -2,7 +2,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.CharBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -37,28 +36,6 @@ public class HttpMessageParseUtil {
         return request.withBody(content.toString());
     }
 
-    public static HttpRequest readHttpRequestMessage(CharBuffer buffer) throws IOException {
-        HttpRequest request = createHttpRequestUntilBody(buffer);
-
-        if (request.hasEmptyBody()) {
-            return request;
-        }
-
-        final int contentLength = request.valueOfKey(HttpHeader.CONTENT_LENGTH)
-            .map(Integer::valueOf).orElse(0);
-
-        logger.info("content length : " + contentLength);
-        StringBuilder content = new StringBuilder();
-        int contentSize = 0;
-        while (contentSize < contentLength) {
-            String readCharStr = String.valueOf(buffer.get());
-            int readCharSize = readCharStr.getBytes().length;
-            content.append(readCharStr);
-            contentSize += readCharSize;
-        }
-
-        return request.withBody(content.toString());
-    }
 
     private static HttpRequest createHttpRequestUntilBody(final BufferedReader reader) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -68,24 +45,9 @@ public class HttpMessageParseUtil {
         while (true) {
             char readChar = (char) reader.read();
             sb.append(readChar);
+            logger.info("readChar :" + readChar);
             curIdx++;
             // detect Header terminator
-            if (isHeaderTermination(readChar, sb, curIdx)) {
-                break;
-            }
-        }
-
-        return createHttpRequest(sb.toString());
-    }
-
-    private static HttpRequest createHttpRequestUntilBody(CharBuffer buffer) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        int curIdx = 0;
-
-        while (true) {
-            char readChar = (char) buffer.get();
-            sb.append(readChar);
-            curIdx++;
             if (isHeaderTermination(readChar, sb, curIdx)) {
                 break;
             }

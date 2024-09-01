@@ -55,8 +55,6 @@ public class HttpServer {
     }
 
     private void receiveAndRespondData(final InputStream inputStream, final OutputStream outputStream) throws IOException {
-        final BufferedOutputStream output = new BufferedOutputStream(outputStream);
-
         final HttpRequest message = HttpMessageParseUtil.readHttpRequestMessage(inputStream);
 
         sendResponse(message, new BufferedOutputStream(outputStream));
