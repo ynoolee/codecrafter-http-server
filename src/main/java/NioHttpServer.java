@@ -4,19 +4,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.logging.Logger;
 
 public class NioHttpServer {
 
-    private static final Logger logger = Logger.getLogger(HttpServer.class.getName());
+    private static final Logger logger = Logger.getLogger(NioHttpServer.class.getName());
     private final String parentAbsolutePath;
-
     private final int port;
 
     public NioHttpServer(final int port, final String parentAbsolutePath) {
@@ -24,43 +20,21 @@ public class NioHttpServer {
         this.port = port;
     }
 
-    private void registerChannelOfEvent(Selector selector, int waitingEvent) throws IOException {
-        var channel = ServerSocketChannel.open();
-        channel.configureBlocking(false);
-        channel.bind(new InetSocketAddress(this.port));
-        channel.register(selector, waitingEvent);
-        logger.info("Register ServerSocketChannel on port " + this.port);
-    }
-
     public void run() {
         // Selector 생성
         try (
             final var selector = Selector.open();
         ) {
-            // == 다수의 Channel 을 생성 및 Selector 에 등록 ===
-            // non-blocking ServerSocketChannel 을 생성
-            // ServerSocketChannel 을 Selector 의 관리 대상으로 등록
-            registerChannelOfEvent(selector, SelectionKey.OP_ACCEPT);
+            registerChannel(selector);
 
-            while (true) {
-                // Selector 의 select 를 호출 (blocking)
-                selector.select();
+            while (selector.select() > 0) { // blocking
                 logger.info("There's some channel to be ready");
                 var selectedKeys = selector.selectedKeys().iterator();
-                // Selector 로부터 selectedKey set 을 가져옴
                 while (selectedKeys.hasNext()) {
                     var selectedKey = selectedKeys.next();
-                    // ready channel 들 중 acceptable 상태인 Channel 을 가져옴
-                    // accept 가능한 serverSocket ( 즉, 어떤 connection 요청을 받은 ServerSocket)
                     if (selectedKey.isAcceptable()) {
-                        // Channel 로부터 client SocketChannel 을 생성함
-                        // SocketChannel 은 READ operation 에 대한 모니터링을 위해 Selector 에 등록함
-                        // ( Write operation 에 대해서는 등록하지 않아도 됨 )
-                        var serverSocketChannel = (ServerSocketChannel) selectedKey.channel();
-                        var clientSocketChannel = serverSocketChannel.accept();
-                        clientSocketChannel.configureBlocking(false);
-                        clientSocketChannel.register(selector, SelectionKey.OP_READ);
-                        logger.info("accept new connection");
+                        var clientSocketChannel = accept(selectedKey.channel());
+                        waitForListen(clientSocketChannel, selector);
                     }
 
                     if (selectedKey.isReadable()) {
@@ -94,23 +68,42 @@ public class NioHttpServer {
         }
     }
 
+    private void registerChannel(Selector selector) throws IOException {
+        var channel = ServerSocketChannel.open();
+        channel.configureBlocking(false);
+        channel.bind(new InetSocketAddress(this.port));
+        channel.register(selector, SelectionKey.OP_ACCEPT);
+        logger.info("Register ServerSocketChannel on port " + this.port);
+    }
+
+    private SocketChannel accept(final SelectableChannel readyChannel) throws IOException {
+        var serverSocketChannel = (ServerSocketChannel) readyChannel;
+        return serverSocketChannel.accept();
+    }
+
+    private void waitForListen(final SocketChannel clientSocketChannel, final Selector selector) throws IOException {
+        clientSocketChannel.configureBlocking(false);
+        clientSocketChannel.register(selector, SelectionKey.OP_READ);
+        logger.info("accept new connection");
+    }
+
     private void sendResponse(
-        final HttpRequest request
-        , final ByteBuffer buffer
+        final HttpRequest request,
+        final ByteBuffer buffer
     ) throws IOException {
         final StartLine startLine = request.getStartLine();
         final String path = startLine.extractPath();
         final HttpMethod method = startLine.method();
 
         if (HttpMethod.POST.equals(method)) {
-            hanldePostMethod(request, buffer, path);
+            respondToPostRequest(request, buffer, path);
         } else if (HttpMethod.GET.equals(method)) {
-            handleGetMethod(buffer, path, request);
+            respondToGetRequest(buffer, path, request);
         }
         buffer.flip();
     }
 
-    private void handleGetMethod(final ByteBuffer output, final String path, HttpRequest request) throws IOException {
+    private void respondToGetRequest(final ByteBuffer output, final String path, HttpRequest request) throws IOException {
         final StartLine startLine = request.getStartLine();
         if ("/".equals(path)) {
             output.put(CommonHttpResponse.OK_RESPONSE.getBytes());
@@ -140,7 +133,7 @@ public class NioHttpServer {
         }
     }
 
-    private void hanldePostMethod(final HttpRequest request, final ByteBuffer output, final String path) throws IOException {
+    private void respondToPostRequest(final HttpRequest request, final ByteBuffer output, final String path) throws IOException {
         final StartLine startLine = request.getStartLine();
         if (path.contains("/files/")) {
             final String requestBody = request.getBody();
@@ -159,7 +152,7 @@ public class NioHttpServer {
         }
     }
 
-    private static String readFromFile(String path) {
+    private String readFromFile(String path) {
         final var filePath = Paths.get(path);
         try {
             final var contents = Files.readAllBytes(filePath);
