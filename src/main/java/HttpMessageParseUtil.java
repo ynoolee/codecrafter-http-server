@@ -49,11 +49,9 @@ public class HttpMessageParseUtil {
             curIdx++;
             // detect Header terminator
             if (isHeaderTermination(readChar, sb, curIdx)) {
-                break;
+                return createHttpRequest(sb.toString());
             }
         }
-
-        return createHttpRequest(sb.toString());
     }
 
     private static boolean isHeaderTermination(char readChar, StringBuilder sb, int curIdx) {
