@@ -1,4 +1,5 @@
 public class Main {
+
     public static void main(String[] args) {
 
         // check program running args
@@ -12,7 +13,8 @@ public class Main {
         if (args.length >= 2) {
             absoluteParentPath = args[1];
         }
-        final NioHttpServer httpServer = new NioHttpServer(4222, absoluteParentPath);
+
+        var httpServer = new MultiThreadedHttpServer(4221, absoluteParentPath);
         httpServer.run();
     }
 }

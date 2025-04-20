@@ -9,17 +9,15 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.logging.Logger;
 
-public class NioHttpServer {
+public class NioHttpServer extends HttpServer{
 
     private static final Logger logger = Logger.getLogger(NioHttpServer.class.getName());
-    private final String parentAbsolutePath;
-    private final int port;
 
     public NioHttpServer(final int port, final String parentAbsolutePath) {
-        this.parentAbsolutePath = parentAbsolutePath;
-        this.port = port;
+        super(port, parentAbsolutePath);
     }
 
+    @Override
     public void run() {
         // Selector 생성
         try (
