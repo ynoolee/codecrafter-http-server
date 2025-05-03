@@ -1,3 +1,5 @@
+import model.Acceptors;
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -16,58 +18,17 @@ public class MultiThreadedHttpServer extends HttpServer {
 
     @Override
     public void run() {
-        var taskCount = 5000;
-        var acceptorCount = 2;
-        var acceptors = Executors.newFixedThreadPool(acceptorCount);
-        var workers = Executors.newVirtualThreadPerTaskExecutor();
+        var workers = Executors.newFixedThreadPool(10); // var workers = Executors.newVirtualThreadPerTaskExecutor()
 
-        try (var serverSocket = new ServerSocket(this.port);
-        ) {
+        try (var serverSocket = new ServerSocket(this.port)) {
             serverSocket.setReuseAddress(true);
-            logger.info("HTTP server started on port " + port);
+            logger.info(" - HTTP server started on port " + port);
 
-            for (int i = 0; i < acceptorCount; i++) {
-                acceptors.submit(() -> {
-                    try {
-                        while (!Thread.currentThread().isInterrupted() && !serverSocket.isClosed()) {
-                            Socket clientSocket = null;
-                            try {
-                                // 최대 연결 수 제한
-                                // 소켓 수락 (try-with-resources로 감싸지 않음)
-                                clientSocket = serverSocket.accept();
+            var acceptors = new Acceptors(serverSocket, 1);
+            acceptors.run(workers, this::receiveAndRespond);
 
-                                // 이 소켓 객체를 final로 캡처하여 작업자 스레드로 전달
-                                final Socket socketToProcess = clientSocket;
-
-                                // 작업자 스레드에 소켓 처리 위임 (소켓 닫기까지 담당)
-                                workers.submit(() -> receiveAndRespond(socketToProcess));
-
-                                // 책임이 작업자 스레드로 이전되었으므로 acceptor에서는 null로 설정
-                                clientSocket = null;
-                            } catch (IOException e) {
-                                if (!serverSocket.isClosed()) {
-                                    System.err.println("연결 수락 중 오류: " + e.getMessage());
-                                }
-                            } finally {
-                                // 예외 발생 시 소켓이 여전히 열려 있다면 닫기
-                                if (clientSocket != null) {
-                                    try {
-                                        clientSocket.close();
-                                    } catch (IOException e) {
-                                        System.err.println("소켓 닫기 실패: " + e.getMessage());
-                                    }
-                                }
-                            }
-                        }
-                    } finally {
-                        System.out.println("Acceptor 스레드 종료");
-                    }
-                });
-            }
             Thread.currentThread().join(); // 현재 스레드가 종료될 때까지 대기
-        } catch (IOException ex) {
-
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
     }
@@ -77,12 +38,11 @@ public class MultiThreadedHttpServer extends HttpServer {
             final InputStream inputStream = clientSocket.getInputStream();
             final OutputStream outputStream = clientSocket.getOutputStream();
         ) {
-            logger.info("receiveAndRespond - port : " + clientSocket.getLocalPort());
             receiveAndRespondData(inputStream, outputStream);
         } catch (IOException exception) {
-            logger.info("Error during request processing");
+            logger.info(" - Error during request processing");
         }
-        logger.info("Close HTTP connection");
+        logger.info(" - Close HTTP connection");
     }
 
     private void receiveAndRespondData(final InputStream inputStream, final OutputStream outputStream) throws IOException {
@@ -142,15 +102,15 @@ public class MultiThreadedHttpServer extends HttpServer {
         final StartLine startLine = request.getStartLine();
         if (path.contains("/files/")) {
             final String requestBody = request.getBody();
-            logger.info("Read RequestBody : " + requestBody);
+            logger.info(" - Read RequestBody : " + requestBody);
             final String resourceId = startLine.extractResourceId();
             final String absolutePath = this.parentAbsolutePath + resourceId;
             try (final FileWriter writer = new FileWriter(absolutePath)) {
-                logger.info("File path :" + absolutePath);
+                logger.info(" - File path :" + absolutePath);
                 writer.write(requestBody);
                 writer.flush();
             }
-            logger.info("Complete Writing file");
+            logger.info(" - Complete Writing file");
             output.write(CommonHttpResponse.CREATED.getBytes());
         } else {
             output.write(CommonHttpResponse.NOT_FOUND_RESOURCE_RESPONSE.getBytes());
